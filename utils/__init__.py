@@ -12,6 +12,10 @@ from utils.cost_tracker import (
     track_api_call,
     get_cost_report,
 )
+from utils.cache_manager import (
+    CacheManager,
+    get_cache_manager,
+)
 
 __all__ = [
     "FileHandler",
@@ -21,4 +25,6 @@ __all__ = [
     "CostTracker",
     "track_api_call",
     "get_cost_report",
+    "CacheManager",
+    "get_cache_manager",
 ]

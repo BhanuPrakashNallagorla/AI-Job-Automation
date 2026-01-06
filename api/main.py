@@ -1,6 +1,6 @@
 """
 FastAPI Application - Main Entry Point.
-AutoApply AI Backend Server.
+AutoApply AI Backend Server (Powered by Google Gemini).
 """
 import time
 from contextlib import asynccontextmanager
@@ -13,7 +13,13 @@ import structlog
 
 from config import settings
 from database.crud import init_async_db
-from api.routes import jobs_router, applications_router, scraper_router, ai_router
+from api.routes import (
+    jobs_router,
+    applications_router,
+    scraper_router,
+    ai_router,
+    monitoring_router,
+)
 
 
 # Configure structured logging
@@ -25,8 +31,8 @@ structlog.configure(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        structlog.processors.JSONRenderer() if settings.log_format == "json"
-        else structlog.dev.ConsoleRenderer(),
+        structlog.dev.ConsoleRenderer() if settings.log_format == "console"
+        else structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
@@ -37,7 +43,7 @@ logger = structlog.get_logger(__name__)
 
 
 # ============================================================================
-# Rate Limiting (Simple In-Memory)
+# Rate Limiting
 # ============================================================================
 
 class RateLimiter:
@@ -48,22 +54,18 @@ class RateLimiter:
         self.requests: dict = {}
     
     def is_allowed(self, client_id: str) -> bool:
-        """Check if request is allowed."""
         now = time.time()
         minute_ago = now - 60
         
-        # Clean old entries
         self.requests = {
             k: [t for t in v if t > minute_ago]
             for k, v in self.requests.items()
         }
         
-        # Check rate
         client_requests = self.requests.get(client_id, [])
         if len(client_requests) >= self.requests_per_minute:
             return False
         
-        # Record request
         if client_id not in self.requests:
             self.requests[client_id] = []
         self.requests[client_id].append(now)
@@ -75,15 +77,14 @@ rate_limiter = RateLimiter(requests_per_minute=100)
 
 
 # ============================================================================
-# Lifespan Context Manager
+# Lifespan
 # ============================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info("Starting AutoApply AI server...")
+    logger.info("Starting AutoApply AI server (Gemini-powered)...")
     
-    # Initialize database
     try:
         await init_async_db()
         logger.info("Database initialized")
@@ -92,12 +93,11 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Cleanup
     logger.info("Shutting down AutoApply AI server...")
 
 
 # ============================================================================
-# Application Setup
+# Application
 # ============================================================================
 
 app = FastAPI(
@@ -105,21 +105,20 @@ app = FastAPI(
     description="""
     ## Job Application Automation Platform
     
-    AutoApply AI helps you:
-    - **Scrape jobs** from Naukri, LinkedIn, and Instahire
-    - **Analyze job descriptions** with AI
-    - **Tailor resumes** for each application
-    - **Generate cover letters** personalized to companies
-    - **Track applications** through the pipeline
+    **Powered by Google Gemini (FREE)**
     
-    ### Key Features
-    - 🤖 AI-powered resume tailoring (3 intensity levels)
-    - 📝 Non-generic cover letter generation
+    - 🤖 AI-powered resume tailoring
+    - 📝 Personalized cover letter generation
     - 📊 Match scoring with detailed breakdowns
-    - 💰 Cost tracking for AI usage
-    - 🔄 Background job processing
+    - 🕷️ Multi-platform job scraping
+    - 💰 Zero API costs (Gemini free tier)
+    
+    ### Rate Limits
+    - 1,500 requests/day (free tier)
+    - 15 requests/minute
+    - Caching reduces actual API calls
     """,
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -130,7 +129,6 @@ app = FastAPI(
 # Middleware
 # ============================================================================
 
-# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -142,7 +140,6 @@ app.add_middleware(
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next: Callable):
-    """Rate limiting middleware."""
     client_ip = request.client.host if request.client else "unknown"
     
     if not rate_limiter.is_allowed(client_ip):
@@ -156,14 +153,10 @@ async def rate_limit_middleware(request: Request, call_next: Callable):
 
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next: Callable):
-    """Request logging middleware."""
     start_time = time.time()
-    
-    # Process request
     response = await call_next(request)
-    
-    # Log request
     process_time = time.time() - start_time
+    
     logger.info(
         "Request processed",
         method=request.method,
@@ -181,7 +174,6 @@ async def logging_middleware(request: Request, call_next: Callable):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions."""
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -194,7 +186,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions."""
     logger.error("Unhandled exception", error=str(exc), exc_info=True)
     
     return JSONResponse(
@@ -211,23 +202,23 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Routes
 # ============================================================================
 
-# Include routers
 app.include_router(jobs_router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(applications_router, prefix="/api/applications", tags=["Applications"])
 app.include_router(scraper_router, prefix="/api/scraper", tags=["Scraper"])
 app.include_router(ai_router, prefix="/api/ai", tags=["AI"])
+app.include_router(monitoring_router, prefix="/api/monitoring", tags=["Monitoring"])
 
 
 # ============================================================================
-# Health & Info Endpoints
+# Health & Info
 # ============================================================================
 
 @app.get("/", tags=["Health"])
 async def root():
-    """Root endpoint with API info."""
     return {
         "name": "AutoApply AI",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "ai_model": "gemini-2.0-flash-exp",
         "status": "running",
         "docs": "/docs",
         "health": "/health",
@@ -236,36 +227,31 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint."""
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "services": {
-            "api": "up",
-            "database": "up",  # Would check actual DB in production
-        }
+        "ai_model": "gemini-2.0-flash-exp",
+        "cost": "FREE",
     }
 
 
 @app.get("/api/info", tags=["Info"])
 async def api_info():
-    """Get API information and configuration."""
+    from ai.gemini_client import get_gemini_client
+    
+    client = get_gemini_client()
+    usage = client.get_usage_stats()
+    
     return {
-        "version": "1.0.0",
-        "ai_models": {
-            "jd_analysis": settings.claude_sonnet_model,
-            "resume_tailor": settings.claude_opus_model,
-            "cover_letter": settings.claude_opus_model,
-        },
+        "version": "2.0.0",
+        "ai_model": "gemini-2.0-flash-exp",
+        "tier": "free",
+        "requests_remaining": usage["remaining"],
         "supported_platforms": ["naukri", "linkedin", "instahire"],
         "tailoring_levels": ["conservative", "moderate", "aggressive"],
         "cover_letter_tones": ["professional", "conversational", "enthusiastic"],
     }
 
-
-# ============================================================================
-# Main Entry Point
-# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn

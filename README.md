@@ -1,15 +1,16 @@
 # AutoApply AI
 
-A Python backend for automating job applications. Scrapes jobs from multiple platforms, uses Claude AI to tailor resumes, and tracks applications.
+A Python backend for automating job applications. Scrapes jobs from multiple platforms, uses **Google Gemini AI** (FREE) to tailor resumes, and tracks applications.
 
 ## Features
 
 - **Job Scraping** - Naukri, LinkedIn, Instahire with anti-detection
-- **JD Analysis** - Extract skills, requirements, and red flags using Claude Sonnet
-- **Resume Tailoring** - Three levels: conservative, moderate, aggressive (Claude Opus)
+- **JD Analysis** - Extract skills, requirements, and red flags
+- **Resume Tailoring** - Three levels: conservative, moderate, aggressive
 - **Cover Letters** - Personalized, non-generic generation
 - **Match Scoring** - Detailed candidate-job fit analysis
 - **Application Tracking** - Full pipeline from scraped to offer
+- **Zero Cost** - Uses Gemini free tier (1,500 requests/day)
 
 ## Setup
 
@@ -20,11 +21,16 @@ playwright install chromium
 
 # Configure
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
+# Add your GEMINI_API_KEY to .env
 
 # Run
 uvicorn api.main:app --reload --port 8000
 ```
+
+### Get Gemini API Key (FREE)
+1. Visit https://aistudio.google.com/app/apikey
+2. Create a new API key
+3. Add to `.env`: `GEMINI_API_KEY=your_key`
 
 API docs: http://localhost:8000/docs
 
@@ -32,7 +38,7 @@ API docs: http://localhost:8000/docs
 
 ```
 ├── api/          # FastAPI endpoints
-├── ai/           # Claude AI integrations
+├── ai/           # Gemini AI integrations
 ├── scrapers/     # Web scrapers
 ├── database/     # SQLAlchemy models
 ├── utils/        # Helpers
@@ -48,13 +54,21 @@ API docs: http://localhost:8000/docs
 | `POST /api/ai/analyze-jd` | Analyze job description |
 | `POST /api/ai/tailor-resume` | Tailor resume for job |
 | `POST /api/ai/generate-cover-letter` | Generate cover letter |
-| `GET /api/applications/stats` | Application statistics |
+| `GET /api/ai/usage-stats` | Check API usage |
+| `GET /api/monitoring/health` | Service health check |
+
+## Rate Limits
+
+Gemini free tier:
+- 1,500 requests/day
+- 15 requests/minute
+- Caching reduces actual API calls
 
 ## Configuration
 
 Required in `.env`:
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=your_key_here
 DATABASE_URL=sqlite:///./app.db
 ```
 

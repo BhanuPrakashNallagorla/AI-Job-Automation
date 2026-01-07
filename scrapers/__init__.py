@@ -1,14 +1,14 @@
 """
-Scrapers module initialization.
+Scrapers module - Real job data only.
+Uses Serper.dev API for Google Jobs data.
 """
-from scrapers.base_scraper import BaseScraper
-from scrapers.naukri_scraper import NaukriScraper
-from scrapers.linkedin_scraper import LinkedInScraper
-from scrapers.instahire_scraper import InstahireScraper
+# Real scraper
+from scrapers.serper_scraper import SerperJobScraper
+
+# Manager
+from scrapers.scraper_manager import ScraperManager
 
 __all__ = [
-    "BaseScraper",
-    "NaukriScraper",
-    "LinkedInScraper",
-    "InstahireScraper",
+    "SerperJobScraper",
+    "ScraperManager",
 ]

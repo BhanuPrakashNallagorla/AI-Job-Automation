@@ -10,9 +10,14 @@ from functools import lru_cache
 class Settings(BaseSettings):
     """Application settings loaded from environment."""
     
-    # API Keys
+    # AI API Keys
     gemini_api_key: str = ""
     anthropic_api_key: str = ""  # Legacy, kept for compatibility
+    
+    # Scraper API Keys (for real job data)
+    serper_api_key: str = ""      # Serper.dev - 2500 free/month (RECOMMENDED)
+    rapidapi_key: str = ""         # RapidAPI/JSearch - 150 free/month
+    scrapingbee_api_key: str = ""  # ScrapingBee - 1000 credits
     
     # Database
     database_url: str = "sqlite+aiosqlite:///./autoapply.db"

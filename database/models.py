@@ -20,12 +20,17 @@ from sqlalchemy import (
     Enum as SQLEnum,
     JSON,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
 
 Base = declarative_base()
+
+
+def generate_uuid():
+    """Generate a UUID string."""
+    return str(uuid.uuid4())
+
 
 
 # ============================================================================
@@ -86,7 +91,7 @@ class Job(Base):
     __tablename__ = "jobs"
     
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     
     # Core Fields
     job_title = Column(String(255), nullable=False, index=True)
@@ -162,10 +167,10 @@ class Application(Base):
     __tablename__ = "applications"
     
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     
     # Relationships
-    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
     
     # Status
     status = Column(SQLEnum(ApplicationStatus), default=ApplicationStatus.PENDING, index=True)
@@ -251,11 +256,11 @@ class Document(Base):
     __tablename__ = "documents"
     
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     
     # Relationships
     application_id = Column(
-        UUID(as_uuid=True), 
+        String(36), 
         ForeignKey("applications.id", ondelete="CASCADE"), 
         nullable=True
     )
@@ -300,7 +305,7 @@ class CostTracking(Base):
     __tablename__ = "cost_tracking"
     
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     
     # Operation Details
     operation_type = Column(SQLEnum(OperationType), nullable=False, index=True)
@@ -314,7 +319,7 @@ class CostTracking(Base):
     cost_usd = Column(Float, default=0.0)
     
     # Context
-    job_id = Column(UUID(as_uuid=True), nullable=True)  # Optional reference to job
+    job_id = Column(String(36), nullable=True)  # Optional reference to job
     description = Column(Text, nullable=True)
     
     # Timestamp
@@ -345,7 +350,7 @@ class ScrapingJob(Base):
     __tablename__ = "scraping_jobs"
     
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     
     # Job Configuration
     platform = Column(SQLEnum(JobSource), nullable=False)

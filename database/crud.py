@@ -22,23 +22,38 @@ from config import settings
 # Engine and Session Setup
 # ============================================================================
 
+# Check if using SQLite (doesn't support pool settings)
+is_sqlite = "sqlite" in settings.database_url.lower()
+
 # Sync engine (for migrations and simple operations)
-sync_engine = create_engine(
-    settings.database_url_sync,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    echo=settings.debug,
-)
+if is_sqlite:
+    sync_engine = create_engine(
+        settings.database_url_sync,
+        echo=settings.debug,
+    )
+else:
+    sync_engine = create_engine(
+        settings.database_url_sync,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        echo=settings.debug,
+    )
 
 # Async engine (for API operations)
-async_engine = create_async_engine(
-    settings.database_url,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    echo=settings.debug,
-)
+if is_sqlite:
+    async_engine = create_async_engine(
+        settings.database_url,
+        echo=settings.debug,
+    )
+else:
+    async_engine = create_async_engine(
+        settings.database_url,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        echo=settings.debug,
+    )
 
 # Session factories
 SyncSessionLocal = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False)

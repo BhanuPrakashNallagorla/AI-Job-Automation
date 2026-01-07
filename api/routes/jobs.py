@@ -100,9 +100,10 @@ async def run_scraping_task(
     num_pages: int,
     experience_level: Optional[str],
 ):
-    """Background task to run job scraping."""
+    """Background task to run job scraping using Serper API."""
     import structlog
-    from scrapers import NaukriScraper, LinkedInScraper, InstahireScraper
+    from scrapers import ScraperManager
+    from config import settings
     
     logger = structlog.get_logger(__name__)
     
@@ -113,51 +114,45 @@ async def run_scraping_task(
         )
     
     try:
-        # Select scraper
-        scrapers = {
-            "naukri": NaukriScraper,
-            "linkedin": LinkedInScraper,
-            "instahire": InstahireScraper,
-        }
+        # Initialize ScraperManager (requires SERPER_API_KEY)
+        manager = ScraperManager(serper_key=settings.serper_api_key)
         
-        scraper_class = scrapers.get(platform.lower())
-        if not scraper_class:
-            raise ValueError(f"Unknown platform: {platform}")
+        logger.info(f"🔍 Scraping REAL jobs: {keyword} in {location}")
         
-        scraper = scraper_class()
+        # Calculate num_results from num_pages
+        num_results = num_pages * 10
         
-        # Progress callback
-        async def progress_callback(page, total, jobs_found):
-            async with get_async_db() as db:
-                progress = int((page / total) * 100)
-                await ScrapingJobCRUD.update_scraping_job_status(
-                    db, scraping_job_id, "running",
-                    progress=progress, jobs_found=jobs_found
-                )
-        
-        # Run scraper
-        jobs = await scraper.scrape_jobs(
+        # Scrape REAL jobs using Serper API
+        jobs = await manager.scrape_jobs(
             keyword=keyword,
             location=location,
-            experience_level=experience_level,
-            num_pages=num_pages,
+            num_results=num_results,
         )
+        
+        if not jobs:
+            logger.warning(f"No jobs found for: {keyword} in {location}")
+            async with get_async_db() as db:
+                await ScrapingJobCRUD.update_scraping_job_status(
+                    db, scraping_job_id, "completed",
+                    progress=100, jobs_found=0, jobs_saved=0,
+                    error_message="No jobs found for this search"
+                )
+            return
+        
+        logger.info(f"✅ Found {len(jobs)} real jobs")
         
         # Save jobs to database
         saved_count = 0
         async with get_async_db() as db:
             for job_data in jobs:
-                # Check for duplicate
-                existing = await JobCRUD.get_job_by_url(db, job_data.get("job_url", ""))
-                if existing:
+                job_url = job_data.get("job_url", "")
+                if not job_url:
                     continue
                 
-                # Map source
-                source_map = {
-                    "naukri": JobSource.NAUKRI,
-                    "linkedin": JobSource.LINKEDIN,
-                    "instahire": JobSource.INSTAHIRE,
-                }
+                # Skip duplicates
+                existing = await JobCRUD.get_job_by_url(db, job_url)
+                if existing:
+                    continue
                 
                 job_record = {
                     "job_title": job_data.get("job_title", "Unknown"),
@@ -166,10 +161,10 @@ async def run_scraping_task(
                     "salary_min": job_data.get("salary_min"),
                     "salary_max": job_data.get("salary_max"),
                     "experience_required": job_data.get("experience_required"),
-                    "description": job_data.get("description_snippet") or job_data.get("full_description"),
-                    "job_url": job_data.get("job_url"),
-                    "source": source_map.get(platform.lower(), JobSource.NAUKRI),
-                    "required_skills": job_data.get("skills"),
+                    "description": job_data.get("description"),
+                    "job_url": job_url,
+                    "source": JobSource.LINKEDIN,  # Google Jobs via Serper
+                    "required_skills": job_data.get("skills", []),
                     "is_easy_apply": job_data.get("is_easy_apply", False),
                 }
                 
@@ -177,7 +172,7 @@ async def run_scraping_task(
                     await JobCRUD.add_job(db, job_record)
                     saved_count += 1
                 except Exception as e:
-                    logger.warning("Failed to save job", error=str(e))
+                    logger.warning(f"Failed to save job: {e}")
             
             # Update scraping job as completed
             await ScrapingJobCRUD.update_scraping_job_status(
@@ -185,19 +180,15 @@ async def run_scraping_task(
                 progress=100, jobs_found=len(jobs), jobs_saved=saved_count
             )
         
-        logger.info(
-            "Scraping completed",
-            platform=platform,
-            jobs_found=len(jobs),
-            jobs_saved=saved_count
-        )
+        logger.info(f"✅ Saved {saved_count} jobs to database")
         
     except Exception as e:
-        logger.error("Scraping failed", error=str(e))
+        error_msg = str(e)
+        logger.error(f"❌ Scraping failed: {error_msg}")
         async with get_async_db() as db:
             await ScrapingJobCRUD.update_scraping_job_status(
                 db, scraping_job_id, "failed",
-                error_message=str(e)
+                error_message=error_msg
             )
 
 
@@ -304,11 +295,9 @@ async def get_jobs(
             limit=per_page,
             offset=offset,
         )
-    
-    total_pages = (total + per_page - 1) // per_page
-    
-    return JobListResponse(
-        jobs=[
+        
+        # Convert to response format inside session context
+        job_responses = [
             JobResponse(
                 id=str(job.id),
                 job_title=job.job_title,
@@ -327,7 +316,12 @@ async def get_jobs(
                 created_at=job.created_at.isoformat() if job.created_at else "",
             )
             for job in jobs
-        ],
+        ]
+    
+    total_pages = (total + per_page - 1) // per_page
+    
+    return JobListResponse(
+        jobs=job_responses,
         total=total,
         page=page,
         per_page=per_page,
